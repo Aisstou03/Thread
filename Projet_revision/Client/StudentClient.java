@@ -2,7 +2,7 @@ package Projet_revision.Client;
 
 
 
-import common.Protocol;
+import Projet_revision.common.Protocol;
 
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
@@ -18,6 +18,8 @@ import java.util.concurrent.Executors;
  * Usage : java client.StudentClient <serverHost> <serverPort>
  */
 public class StudentClient {
+
+    private static final Scanner KBD = new Scanner(System.in);
 
     // ── commandes disponibles ────────────────────────────────────────────────
     private static final String HELP =
@@ -74,9 +76,8 @@ public class StudentClient {
 
         // 5. Boucle principale (thread courant)
         System.out.println(HELP);
-        Scanner scanner = new Scanner(System.in);
-        while (scanner.hasNextLine()) {
-            String line = scanner.nextLine().trim();
+        while (KBD.hasNextLine()) {
+            String line = KBD.nextLine().trim();
             if (line.isEmpty()) continue;
             handleCommand(line, udpPort);
         }
@@ -204,5 +205,4 @@ public class StudentClient {
 
         new StudentClient(host, port, name).start();
     }
-}
 }

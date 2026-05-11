@@ -9,6 +9,14 @@ public class Message {
         this.args    = args;
     }
  
+    public String getCommand() {
+        return command;
+    }
+ 
+    public String[] getArgs() {
+        return args;
+    }
+ 
     /**
      * Parse une ligne texte reçue sur le réseau.
      * Exemple : "LIST INFO M1" → command="LIST", args=["INFO","M1"]

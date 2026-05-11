@@ -1,7 +1,7 @@
 package Projet_revision.Client ;
 
-import common.Message;
-import common.Protocol;
+import Projet_revision.common.Message;
+import Projet_revision.common.Protocol;
 
 import java.io.BufferedReader;
 import java.io.IOException;

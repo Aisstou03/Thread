@@ -1,7 +1,7 @@
 package Projet_revision.Client;
 
-import common.Message;
-import common.Protocol;
+import Projet_revision.common.Message;
+import Projet_revision.common.Protocol;
 
 import java.io.*;
 import java.net.*;
@@ -25,13 +25,12 @@ import java.util.concurrent.Executors;
  */
 public class PrivateChatHandler {
 
-    private final String            myName;
     private final ServerSocket      serverSocket;   // écoute les HEY entrants
     private final ExecutorService   chatPool;
+    private static final Scanner    KBD = new Scanner(System.in);
 
     // ── constructeur ──────────────────────────────────────────────────────────
     public PrivateChatHandler(String myName) {
-        this.myName  = myName;
         this.chatPool = Executors.newCachedThreadPool();
 
         ServerSocket tmp = null;
@@ -171,9 +170,8 @@ public class PrivateChatHandler {
             reader.start();
 
             // Thread courant : lecture clavier + envoi
-            Scanner kbd = new Scanner(System.in);
-            while (kbd.hasNextLine()) {
-                String input = kbd.nextLine().trim();
+            while (KBD.hasNextLine()) {
+                String input = KBD.nextLine().trim();
                 if (input.equalsIgnoreCase("bye")) {
                     out.println("bye");
                     break;
