@@ -1,0 +1,182 @@
+package Projet_revision.Client;
+
+import common.Message;
+import common.Protocol;
+
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+
+/**
+ * Runnable qui tourne dans un thread dédié.
+ *
+ * Responsabilités :
+ *   1. Ouvre un DatagramSocket sur un port libre → reçoit les MSG/PLAN UDP du groupe.
+ *   2. Garde une socket TCP vers le serveur de groupe (JOIN, envoi de commandes de contrôle).
+ *   3. Expose sendMessage() pour que StudentClient puisse envoyer SAY/PLAN via TCP
+ *      (le serveur de groupe fera le broadcast UDP).
+ */
+public class GroupListener implements Runnable {
+
+    private static final int BUFFER_SIZE = 4096;
+
+    // ── UDP (réception des broadcasts du groupe) ──────────────────────────────
+    private final DatagramSocket udpSocket;
+
+    // ── TCP (connexion au serveur de groupe) ──────────────────────────────────
+    private Socket         groupSocket;
+    private PrintWriter    groupOut;
+    private BufferedReader groupIn;
+
+    private volatile boolean running = true;
+
+    // ── constructeur ──────────────────────────────────────────────────────────
+    public GroupListener() {
+        DatagramSocket tmp = null;
+        try {
+            tmp = new DatagramSocket(); // port libre attribué par l'OS
+        } catch (SocketException e) {
+            System.err.println("[GroupListener] Impossible d'ouvrir le socket UDP : " + e.getMessage());
+        }
+        udpSocket = tmp;
+    }
+
+    // ── port UDP local (communiqué au serveur de groupe lors du JOIN) ─────────
+    public int getLocalPort() {
+        return udpSocket != null ? udpSocket.getLocalPort() : -1;
+    }
+
+    // ── rejoindre un groupe (TCP) ─────────────────────────────────────────────
+    /**
+     * Ouvre une connexion TCP vers le serveur de groupe et envoie JOIN.
+     *
+     * Protocole : "JOIN <nom_etudiant> <port_udp>"
+     * Le serveur répond : "200 JOIN OK" puis renvoie les annonces archivées.
+     *
+     * @return true si le JOIN a réussi.
+     */
+    public boolean joinGroup(String groupIp, int groupPort, String studentName, int udpPort) {
+        try {
+            groupSocket = new Socket(groupIp, groupPort);
+            groupOut    = new PrintWriter(groupSocket.getOutputStream(), true);
+            groupIn     = new BufferedReader(new InputStreamReader(groupSocket.getInputStream()));
+
+            // Envoi du JOIN
+            String joinMsg = Message.build(Protocol.CMD_JOIN, studentName, String.valueOf(udpPort));
+            groupOut.println(joinMsg);
+
+            // Lecture du message d'accueil + annonces archivées
+            String line;
+            while ((line = groupIn.readLine()) != null) {
+                // Le serveur de groupe envoie "200 JOIN OK" puis les annonces,
+                // et termine avec une ligne vide ou un marqueur de fin
+                System.out.println("[Groupe] " + line);
+                if (line.startsWith(String.valueOf(Protocol.CODE_OK) + " JOIN") ||
+                    line.startsWith("---")) {
+                    // fin des annonces archivées (convention à aligner avec Personne B)
+                    break;
+                }
+            }
+            return true;
+
+        } catch (IOException e) {
+            System.err.println("[GroupListener] Erreur joinGroup : " + e.getMessage());
+            return false;
+        }
+    }
+
+    // ── envoi d'un message au groupe (TCP → le serveur broadcast en UDP) ──────
+    /**
+     * Envoie "MSG <nom> <texte>" ou "PLAN <nom> <texte>" au serveur de groupe via TCP.
+     * C'est le serveur de groupe qui se charge du broadcast UDP vers tous les membres.
+     */
+    public void sendMessage(String cmd, String senderName, String text) {
+        if (groupOut == null) {
+            System.out.println("[GroupListener] Pas connecté à un groupe.");
+            return;
+        }
+        String msg = Message.build(cmd, senderName, text);
+        groupOut.println(msg);
+    }
+
+    // ── accès à la socket TCP du groupe (utilisé par PrivateChatHandler) ──────
+    public Socket getGroupTcpSocket() {
+        return groupSocket;
+    }
+
+    // ── boucle principale : écoute UDP ────────────────────────────────────────
+    @Override
+    public void run() {
+        if (udpSocket == null) return;
+
+        byte[] buffer = new byte[BUFFER_SIZE];
+        System.out.println("[GroupListener] En écoute UDP sur le port " + udpSocket.getLocalPort());
+
+        while (running) {
+            try {
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                udpSocket.receive(packet);          // bloquant
+
+                String received = new String(
+                    packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8
+                ).trim();
+
+                displayGroupMessage(received);
+
+            } catch (SocketException e) {
+                if (running) {
+                    System.err.println("[GroupListener] Socket fermée de façon inattendue.");
+                }
+                // Si running == false, c'est un arrêt voulu
+            } catch (IOException e) {
+                System.err.println("[GroupListener] Erreur réception UDP : " + e.getMessage());
+            }
+        }
+    }
+
+    // ── affichage formaté des messages reçus ──────────────────────────────────
+    private void displayGroupMessage(String raw) {
+        Message msg = Message.parse(raw);
+        if (msg == null) {
+            System.out.println("[Groupe] " + raw);
+            return;
+        }
+
+        String[] args = msg.getArgs();
+        switch (msg.getCommand()) {
+            case Protocol.CMD_MSG:
+                // MSG <expediteur> <texte…>
+                if (args.length >= 2) {
+                    System.out.println("[Groupe][" + args[0] + "] " + joinFrom(args, 1));
+                }
+                break;
+            case Protocol.CMD_PLAN:
+                // PLAN <expediteur> <texte…>
+                if (args.length >= 2) {
+                    System.out.println("[📅 PLAN][" + args[0] + "] " + joinFrom(args, 1));
+                }
+                break;
+            default:
+                System.out.println("[Groupe] " + raw);
+        }
+    }
+
+    /** Concatène les éléments d'un tableau à partir de l'index start. */
+    private String joinFrom(String[] arr, int start) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < arr.length; i++) {
+            if (i > start) sb.append(' ');
+            sb.append(arr[i]);
+        }
+        return sb.toString();
+    }
+
+    // ── arrêt propre ──────────────────────────────────────────────────────────
+    public void stop() {
+        running = false;
+        if (udpSocket != null) udpSocket.close();
+        try {
+            if (groupSocket != null) groupSocket.close();
+        } catch (IOException ignored) {}
+    }
+}
