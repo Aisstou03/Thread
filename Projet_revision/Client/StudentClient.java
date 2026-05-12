@@ -37,6 +37,7 @@ public class StudentClient {
     private ServerConnection   serverConn;
     private GroupListener      groupListener;
     private PrivateChatHandler privateChatHandler;
+    private PrivateChatHandler.ChatSession privateChatSession;
 
     // groupe courant
     private String currentGroup = null;
@@ -50,10 +51,6 @@ public class StudentClient {
 
 
     public void start() {
-        System.out.println("╔══════════════════════════════════════════════╗");
-        System.out.println("║    Systeme de revision — " + studentName + "      ║");
-        System.out.println("╚══════════════════════════════════════════════╝\n");
-        
         // 1. Connexion au serveur central
         serverConn = new ServerConnection(serverHost, serverPort);
         if (!serverConn.connect()) {
@@ -69,6 +66,20 @@ public class StudentClient {
 
         // 3. PrivateChatHandler — récepteur de HEY entrants
         privateChatHandler = new PrivateChatHandler(studentName);
+        privateChatHandler.setSessionListener(new PrivateChatHandler.SessionListener() {
+            @Override
+            public void onSessionStarted(PrivateChatHandler.ChatSession session, String peerName, boolean initiator) {
+                privateChatSession = session;
+            }
+
+            @Override
+            public void onSessionEnded(String peerName) {
+                if (privateChatSession != null && privateChatSession.getPeerName().equals(peerName)) {
+                    privateChatSession = null;
+                }
+                System.out.println("[PrivateChat] Session terminée avec " + peerName + ".");
+            }
+        });
         int privatePort = privateChatHandler.getLocalPort();
         System.out.println("[INFO] Chat privé TCP sur le port " + privatePort);
 
@@ -93,6 +104,19 @@ public class StudentClient {
 
     // ── dispatch des commandes ────────────────────────────────────────────────
     private void handleCommand(String line, int udpPort) {
+        if (privateChatSession != null) {
+            if (line.equalsIgnoreCase("bye")) {
+                String peerName = privateChatSession.getPeerName();
+                privateChatSession.send("bye");
+                privateChatSession.close();
+                privateChatSession = null;
+                System.out.println("[PrivateChat] Session terminée avec " + peerName + ".");
+                return;
+            }
+            privateChatSession.send(line);
+            return;
+        }
+
         String[] parts = line.split("\\s+", 2);
         String cmd  = parts[0].toLowerCase();
         String args = parts.length > 1 ? parts[1] : "";
@@ -174,7 +198,15 @@ public class StudentClient {
                 }
                 String target = args.trim();
                 // Le serveur de groupe nous renvoie 300 HEY <ip> <port>
-                privateChatHandler.initiate(groupListener.getGroupTcpSocket(), studentName, target);
+                PrivateChatHandler.ChatSession session = privateChatHandler.initiate(
+                        groupListener.getGroupOut(),
+                        groupListener.getGroupIn(),
+                        studentName,
+                        target
+                );
+                if (session != null) {
+                    privateChatSession = session;
+                }
                 break;
             }
 
@@ -196,13 +228,25 @@ public class StudentClient {
 
     // ── main ──────────────────────────────────────────────────────────────────
     public static void main(String[] args) {
-        if (args.length < 3) {
-            System.out.println("Usage : java client.StudentClient <serverHost> <serverPort> <votreNom>");
+        if (args.length < 2) {
+            System.out.println("Usage : java client.StudentClient <serverHost> <serverPort>");
             System.exit(1);
         }
         String host = args[0];
         int    port = Integer.parseInt(args[1]);
-        String name = args[2];
+
+        System.out.println("╔══════════════════════════════════════════════╗");
+        System.out.println("║    Systeme de revision — Identification      ║");
+        System.out.println("╚══════════════════════════════════════════════╝");
+
+        System.out.print("Votre nom     : ");
+        String name = KBD.nextLine().trim();
+        System.out.print("Votre filiere : ");
+        String filiere = KBD.nextLine().trim();
+        System.out.print("Votre niveau  : ");
+        String niveau = KBD.nextLine().trim();
+
+        System.out.println("[INFO] Profil : " + name + " | " + filiere + " | " + niveau);
 
         new StudentClient(host, port, name).start();
     }

@@ -121,6 +121,14 @@ public class GroupListener implements Runnable {
         return groupSocket;
     }
 
+    public PrintWriter getGroupOut() {
+        return groupOut;
+    }
+
+    public BufferedReader getGroupIn() {
+        return groupIn;
+    }
+
     // ── boucle principale : écoute UDP ────────────────────────────────────────
     @Override
     public void run() {
