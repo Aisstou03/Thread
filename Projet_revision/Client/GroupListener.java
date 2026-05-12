@@ -59,31 +59,30 @@ public class GroupListener implements Runnable {
      *
      * @return true si le JOIN a réussi.
      */
-    public boolean joinGroup(String groupIp, int groupPort, String studentName, int udpPort) {
-        try {
-            groupSocket = new Socket(groupIp, groupPort);
-            groupOut    = new PrintWriter(groupSocket.getOutputStream(), true);
-            groupIn     = new BufferedReader(new InputStreamReader(groupSocket.getInputStream()));
+    public boolean joinGroup(String groupIp, int groupPort, String studentName, int udpPort, int privateTcpPort) {
+    try {
+        groupSocket = new Socket(groupIp, groupPort);
+        groupOut    = new PrintWriter(groupSocket.getOutputStream(), true);
+        groupIn     = new BufferedReader(new InputStreamReader(groupSocket.getInputStream()));
 
             //mémoriser l'adresse UDP du groupe (convention : port UDP = port TCP + 1)
             this.groupIp      = groupIp;
             this.groupUdpPort = groupPort + 1;
 
             // Envoi du JOIN
-            String joinMsg = Message.build(Protocol.CMD_JOIN, studentName, String.valueOf(udpPort));
+            String joinMsg = Message.build(Protocol.CMD_JOIN, studentName, String.valueOf(udpPort), String.valueOf(privateTcpPort));
             groupOut.println(joinMsg);
 
             // Lecture du message d'accueil + annonces archivées
+            // Lecture du message d'accueil + annonces archivées
+            // On lit toutes les lignes jusqu'au marqueur de fin "--- END_ARCHIVE ---"
             String line;
             while ((line = groupIn.readLine()) != null) {
-                // Le serveur de groupe envoie "200 JOIN OK" puis les annonces,
-                // et termine avec une ligne vide ou un marqueur de fin
-                System.out.println("[Groupe] " + line);
-                if (line.startsWith(String.valueOf(Protocol.CODE_OK) + " JOIN") ||
-                    line.startsWith("---")) {
-                    // fin des annonces archivées (convention à aligner avec Personne B)
+                // Marqueur de fin envoyé par le serveur → on sort de la boucle
+                if (line.startsWith("--- END_ARCHIVE ---")) {
                     break;
                 }
+                System.out.println("[Groupe] " + line);
             }
             return true;
 

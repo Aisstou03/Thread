@@ -167,7 +167,7 @@ public class StudentClient {
                 }
                 String groupIp   = info[0];
                 int    groupPort = Integer.parseInt(info[1]);
-                boolean joined = groupListener.joinGroup(groupIp, groupPort, studentName, udpPort);
+                boolean joined = groupListener.joinGroup(groupIp, groupPort, studentName, udpPort, privateChatHandler.getLocalPort());
                 if (joined) {
                     currentGroup = args;
                     System.out.println("[INFO] Vous avez rejoint : " + args);

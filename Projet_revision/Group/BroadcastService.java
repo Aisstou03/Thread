@@ -25,11 +25,13 @@ public class BroadcastService {
         public final String name;
         public final String ip;
         public final int udpPort;
+        public final int tcpPort;   // NOUVEAU : port TCP prive pour les HEY
 
-        public Member(String name, String ip, int udpPort) {
+        public Member(String name, String ip, int udpPort, int tcpPort) {
             this.name = name;
             this.ip = ip;
             this.udpPort = udpPort;
+            this.tcpPort = tcpPort;
         }
     }
 
@@ -91,5 +93,10 @@ public class BroadcastService {
 
     public int getMemberCount() {
         return members.size();
+    }
+
+    /** Retourne une copie de la liste des membres. */
+    public List<Member> getMembers() {
+        return new ArrayList<>(members);
     }
 }
