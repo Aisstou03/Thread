@@ -70,7 +70,12 @@ public class GroupServer {
         registerWithCentralServer();
 
         // 2. Creer la socket UDP (utilisee pour la diffusion ET la reception)
-        DatagramSocket udpSocket = new DatagramSocket(udpPort);
+        DatagramSocket udpSocket;
+        try {
+            udpSocket = new DatagramSocket(udpPort);
+        } catch (java.net.BindException e) {
+            throw new Exception("Impossible d'ouvrir le port UDP " + udpPort + ". Il est déjà utilisé.", e);
+        }
         broadcastService = new BroadcastService(udpSocket);
 
         // 3. Demarrer l'ecoute TCP dans un thread (pour les JOIN)
@@ -130,6 +135,8 @@ public class GroupServer {
                 // Un thread par membre
                 new Thread(new MemberHandler(memberSocket, broadcastService), "Member-Handler").start();
             }
+        } catch (java.net.BindException e) {
+            System.err.println("[GroupServer] Impossible d'ouvrir le port TCP " + tcpPort + " : il est déjà utilisé.");
         } catch (Exception e) {
             System.err.println("[GroupServer] Erreur ecoute TCP : " + e.getMessage());
         }
@@ -161,19 +168,19 @@ public class GroupServer {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 4) {
-            System.err.println("Usage : java Projet_revision.Group.GroupServer <nom> <filiere> <niveau> <matiere>");
-            System.err.println("Exemple : java Projet_revision.Group.GroupServer M1-INFO-Reseaux Informatique M1 Reseaux");
+            System.err.println("Usage : java Projet_revision.Group.GroupServer <nom> <filiere> <niveau> <matiere> [tcpPort] [udpPort]");
+            System.err.println("Exemple : java Projet_revision.Group.GroupServer M1-INFO-Reseaux Informatique M1 Reseaux 6000 6001");
             System.exit(1);
         }
-
         String name = args[0];
         String filiere = args[1];
         String niveau = args[2];
         String matiere = args[3];
-
+        int tcpPort = (args.length > 4) ? Integer.parseInt(args[4]) : GROUP_TCP_PORT;
+        int udpPort = (args.length > 5) ? Integer.parseInt(args[5]) : GROUP_UDP_PORT;
         GroupServer server = new GroupServer(
             name, filiere, niveau, matiere,
-            GROUP_TCP_PORT, GROUP_UDP_PORT,
+            tcpPort, udpPort,
             "localhost", SERVER_CENTRAL_PORT
         );
         server.start();
