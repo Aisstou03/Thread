@@ -128,9 +128,7 @@ public class StudentClient {
                 // info = { ip, port }
                 String groupIp   = info[0];
                 int    groupPort = Integer.parseInt(info[1]);
-
-                // Se connecter au serveur de groupe en TCP
-                boolean joined = groupListener.joinGroup(groupIp, groupPort, studentName, udpPort);
+                boolean joined = groupListener.joinGroup(groupIp, groupPort, studentName, udpPort, privateChatHandler.getLocalPort());
                 if (joined) {
                     currentGroup = groupName;
                     System.out.println("[INFO] Vous avez rejoint le groupe : " + groupName);
