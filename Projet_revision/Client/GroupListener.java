@@ -20,6 +20,8 @@ public class GroupListener implements Runnable {
 
     private static final int BUFFER_SIZE = 4096;
 
+    
+
     // ── UDP (réception des broadcasts du groupe) ──────────────────────────────
     private final DatagramSocket udpSocket;
 
@@ -27,6 +29,8 @@ public class GroupListener implements Runnable {
     private Socket         groupSocket;
     private PrintWriter    groupOut;
     private BufferedReader groupIn;
+    private String groupIp;
+    private int    groupUdpPort;
 
     private volatile boolean running = true;
 
@@ -61,6 +65,10 @@ public class GroupListener implements Runnable {
             groupOut    = new PrintWriter(groupSocket.getOutputStream(), true);
             groupIn     = new BufferedReader(new InputStreamReader(groupSocket.getInputStream()));
 
+            //mémoriser l'adresse UDP du groupe (convention : port UDP = port TCP + 1)
+            this.groupIp      = groupIp;
+            this.groupUdpPort = groupPort + 1;
+
             // Envoi du JOIN
             String joinMsg = Message.build(Protocol.CMD_JOIN, studentName, String.valueOf(udpPort));
             groupOut.println(joinMsg);
@@ -91,12 +99,22 @@ public class GroupListener implements Runnable {
      * C'est le serveur de groupe qui se charge du broadcast UDP vers tous les membres.
      */
     public void sendMessage(String cmd, String senderName, String text) {
-        if (groupOut == null) {
-            System.out.println("[GroupListener] Pas connecté à un groupe.");
-            return;
-        }
+    if (udpSocket == null || groupIp == null) {
+        System.out.println("[GroupListener] Pas connecté à un groupe.");
+        return;
+    }
+    try {
         String msg = Message.build(cmd, senderName, text);
-        groupOut.println(msg);
+        byte[] data = msg.getBytes(StandardCharsets.UTF_8);
+        DatagramPacket packet = new DatagramPacket(
+            data, data.length,
+            InetAddress.getByName(groupIp),
+            groupUdpPort
+        );
+        udpSocket.send(packet);
+    } catch (IOException e) {
+        System.err.println("[GroupListener] Erreur envoi UDP : " + e.getMessage());
+    }
     }
 
     // ── accès à la socket TCP du groupe (utilisé par PrivateChatHandler) ──────
@@ -142,8 +160,8 @@ public class GroupListener implements Runnable {
             return;
         }
 
-        String[] args = msg.getArgs();
-        switch (msg.getCommand()) {
+        String[] args = msg.args;
+        switch (msg.command) {
             case Protocol.CMD_MSG:
                 // MSG <expediteur> <texte…>
                 if (args.length >= 2) {
