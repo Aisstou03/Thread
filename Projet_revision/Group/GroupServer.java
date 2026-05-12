@@ -21,9 +21,9 @@ import java.net.Socket;
  *   3. Ouvre un DatagramSocket UDP pour recevoir les MSG et PLAN
  *
  * Lancement :
- *   java Projet_revision.Group.GroupServer <nom_groupe> <filiere> <niveau> <matiere>
+ *   java Projet_revision.Group.GroupServer <nom_groupe> <filiere> <niveau> <matiere> [tcpPort] [udpPort]
  * Exemple :
- *   java Projet_revision.Group.GroupServer M1-INFO-Reseaux Informatique M1 Reseaux
+ *   java Projet_revision.Group.GroupServer M1-INFO-Reseaux Informatique M1 Reseaux 6000 6001
  */
 public class GroupServer {
 
