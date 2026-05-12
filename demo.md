@@ -1,6 +1,4 @@
-# Scénario de démo — Projet Programmation Réseau
 
-Durée : 8-10 minutes. L'objectif est de raconter une **histoire** au prof, pas juste taper des commandes.
 
 > **Histoire** : *"Diane, Moussa et Awa, trois étudiants en M1 Info, veulent réviser les réseaux ensemble."*
 
@@ -20,7 +18,6 @@ Ouvre **6 terminaux** dans VS Code et place-les en grille pour que le prof voie 
 **Avant tout** — Tuer les anciens processus et recompiler :
 
 ```bash
-killall java
 javac Projet_revision/common/*.java Projet_revision/Group/*.java Projet_revision/Server/*.java Projet_revision/Client/*.java
 ```
 
