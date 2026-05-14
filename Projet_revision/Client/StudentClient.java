@@ -24,6 +24,7 @@ public class StudentClient {
         "Commandes disponibles :\n" +
         "  list <filiere> <niveau>   — liste les groupes\n" +
         "  join <groupe>             — rejoindre un groupe\n" +
+        "  info <groupe>             — détails d'un groupe\n" +
         "  say <message>             — envoyer un message public (UDP)\n" +
         "  plan <message>            — envoyer une annonce (UDP archivé)\n" +
         "  hey <etudiant>            — démarrer un chat privé (TCP)\n" +
@@ -132,6 +133,22 @@ public class StudentClient {
                 }
                 String response = serverConn.list(a[0], a[1]);
                 System.out.println(response != null ? response : "[ERREUR] Pas de réponse du serveur.");
+                break;
+            }
+
+            // ── INFO <nom_groupe> ─────────────────────────────────────────────
+            case "info": {
+                if (args.isEmpty()) {
+                    System.out.println("[USAGE] info <nom_groupe>");
+                    break;
+                }
+                String groupName = args.trim();
+                String[] info = serverConn.info(groupName);
+                if (info == null) {
+                    System.out.println("[ERREUR] 404 — Groupe introuvable : " + groupName);
+                } else {
+                    System.out.println("[INFO] " + groupName + " -> IP : " + info[0] + " | Port : " + info[1]);
+                }
                 break;
             }
 
