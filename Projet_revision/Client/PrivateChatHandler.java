@@ -5,7 +5,6 @@ import Projet_revision.common.Protocol;
 
 import java.io.*;
 import java.net.*;
-import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,9 +24,89 @@ import java.util.concurrent.Executors;
  */
 public class PrivateChatHandler {
 
+    public interface SessionListener {
+        void onSessionStarted(ChatSession session, String peerName, boolean initiator);
+        void onSessionEnded(String peerName);
+    }
+
+    public class ChatSession {
+        private final Socket socket;
+        private final PrintWriter out;
+        private final BufferedReader in;
+        private final String peerName;
+        private final boolean initiator;
+        private final Runnable onClose;
+        private volatile boolean open = true;
+
+        private ChatSession(Socket socket, String peerName, PrintWriter out, BufferedReader in,
+                            boolean initiator, Runnable onClose) {
+            this.socket = socket;
+            this.out = out;
+            this.in = in;
+            this.peerName = peerName;
+            this.initiator = initiator;
+            this.onClose = onClose;
+        }
+
+        public String getPeerName() {
+            return peerName;
+        }
+
+        public boolean isOpen() {
+            return open && !socket.isClosed();
+        }
+
+        public void send(String message) {
+            if (!isOpen()) {
+                System.out.println("[PrivateChat] Session fermée avec " + peerName + ".");
+                return;
+            }
+            out.println(message);
+            out.flush();
+        }
+
+        public void close() {
+            if (!open) return;
+            open = false;
+            try {
+                out.flush();
+            } catch (Exception ignored) {}
+            try {
+                socket.close();
+            } catch (IOException ignored) {}
+            if (onClose != null) {
+                onClose.run();
+            }
+        }
+
+        private void runIncomingReader() {
+            try {
+                String line;
+                while ((line = in.readLine()) != null) {
+                    if ("bye".equalsIgnoreCase(line.trim())) {
+                        System.out.println("[PrivateChat] Session terminée par " + peerName + ".");
+                        close();
+                        return;
+                    }
+                    System.out.println("[" + peerName + "] " + line);
+                }
+            } catch (IOException ignored) {
+            } finally {
+                if (isOpen()) {
+                    System.out.println("[PrivateChat] Session fermée avec " + peerName + ".");
+                }
+                close();
+            }
+        }
+    }
+
     private final ServerSocket      serverSocket;   // écoute les HEY entrants
     private final ExecutorService   chatPool;
-    private static final Scanner    KBD = new Scanner(System.in);
+    private SessionListener sessionListener;
+
+    public void setSessionListener(SessionListener listener) {
+        this.sessionListener = listener;
+    }
 
     // ── constructeur ──────────────────────────────────────────────────────────
     public PrivateChatHandler(String myName) {
@@ -80,111 +159,102 @@ public class PrivateChatHandler {
      *   1. Envoie "HEY <myName> TO <target>" via la socket TCP du groupe.
      *   2. Attend "300 HEY <target> <ip> <port>" en retour.
      *   3. Ouvre une socket TCP vers le destinataire.
-     *   4. Lance la boucle de saisie dans un thread.
+     *   4. Lance la session de chat.
      *
-     * @param groupTcpSocket socket TCP déjà ouverte vers le serveur de groupe
+     * @param groupOut writer TCP vers le serveur de groupe
+     * @param groupIn  reader TCP vers le serveur de groupe
      */
-    public void initiate(Socket groupTcpSocket, String myName, String target) {
-        if (groupTcpSocket == null || groupTcpSocket.isClosed()) {
+    public ChatSession initiate(PrintWriter groupOut, BufferedReader groupIn, String myName, String target) {
+        if (groupOut == null || groupIn == null) {
             System.out.println("[PrivateChat] Pas connecté à un groupe — impossible d'envoyer HEY.");
-            return;
+            return null;
         }
 
         try {
-            PrintWriter  groupOut = new PrintWriter(groupTcpSocket.getOutputStream(), true);
-            BufferedReader groupIn = new BufferedReader(
-                    new InputStreamReader(groupTcpSocket.getInputStream()));
-
-            // Envoi du HEY
             String heyMsg = Message.build(Protocol.CMD_HEY, myName, "TO", target);
             groupOut.println(heyMsg);
 
-            // Lecture de la réponse du serveur de groupe
             String response = groupIn.readLine();
             if (response == null) {
                 System.out.println("[PrivateChat] Pas de réponse du groupe.");
-                return;
+                return null;
             }
 
-            // Attendu : "300 HEY <target> <ip> <port>"
             if (!response.startsWith(String.valueOf(Protocol.CODE_REDIRECT))) {
                 System.out.println("[PrivateChat] Réponse inattendue : " + response);
-                return;
+                return null;
             }
 
             Message msg  = Message.parse(response);
             String[] args = msg.getArgs();
-            // args = [ "HEY", target, ip, port ]
             if (args.length < 4) {
                 System.out.println("[PrivateChat] Réponse mal formée : " + response);
-                return;
+                return null;
             }
             String peerIp   = args[2];
             int    peerPort = Integer.parseInt(args[3]);
 
-            // Connexion directe au destinataire
-            Socket chatSocket = new Socket(peerIp, peerPort);
-            System.out.println("[PrivateChat] Conversation privée ouverte avec " + target);
+            System.out.println("[PrivateChat] Connexion vers " + target);
+            if (peerIp == null || peerIp.isBlank() || peerPort <= 0) {
+                System.out.println("[PrivateChat] Adresse de pair invalide : ip=" + peerIp + " port=" + peerPort);
+                return null;
+            }
 
-            // Thread de chat (lecture clavier + envoi)
-            chatPool.submit(() -> runChatSession(chatSocket, target, true));
+            Socket chatSocket = new Socket(peerIp, peerPort);
+            PrintWriter tempOut = new PrintWriter(chatSocket.getOutputStream(), true);
+            tempOut.println(myName); // Envoi du nom en premier
+            BufferedReader tempIn = new BufferedReader(new InputStreamReader(chatSocket.getInputStream()));
+            ChatSession session = createChatSession(chatSocket, target, tempOut, tempIn, true);
+            if (sessionListener != null) {
+                sessionListener.onSessionStarted(session, target, true);
+            }
+            return session;
 
         } catch (IOException e) {
             System.err.println("[PrivateChat] Erreur initiate : " + e.getMessage());
+            return null;
         }
     }
 
     // ── gestion d'une connexion entrante (mode RÉCEPTEUR) ─────────────────────
     private void handleIncomingChat(Socket socket) {
-        String peer = socket.getInetAddress().getHostAddress();
-        System.out.println("[PrivateChat] Connexion entrante de " + peer);
-        runChatSession(socket, peer, false);
+        try {
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            String peerName = in.readLine(); // Lecture du nom envoyé par l'initiateur
+            if (peerName == null || peerName.trim().isEmpty()) {
+                System.err.println("[PrivateChat] Nom de pair non reçu, fermeture.");
+                socket.close();
+                return;
+            }
+            ChatSession session = createChatSession(socket, peerName.trim(), out, in, false);
+            if (sessionListener != null) {
+                sessionListener.onSessionStarted(session, peerName.trim(), false);
+            }
+        } catch (IOException e) {
+            System.err.println("[PrivateChat] Erreur ouverture session entrante : " + e.getMessage());
+            try {
+                socket.close();
+            } catch (IOException ignored) {}
+        }
     }
 
-    // ── boucle de chat (commune aux deux modes) ───────────────────────────────
-    /**
-     * Gère une session de chat bidirectionnelle.
-     *
-     * Un sous-thread lit les messages entrants ; le thread courant lit le clavier.
-     * Tape "bye" pour quitter.
-     *
-     * @param initiator true si c'est nous qui avons ouvert la connexion
-     */
-    private void runChatSession(Socket socket, String peerName, boolean initiator) {
-        try (
-            PrintWriter  out = new PrintWriter(socket.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))
-        ) {
-            System.out.println("[PrivateChat ↔ " + peerName + "] Tapez vos messages. 'bye' pour quitter.");
+    private ChatSession createChatSession(Socket socket, String peerName, boolean initiator) throws IOException {
+        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        return createChatSession(socket, peerName, out, in, initiator);
+    }
 
-            // Thread de lecture des messages entrants
-            Thread reader = new Thread(() -> {
-                try {
-                    String line;
-                    while ((line = in.readLine()) != null) {
-                        System.out.println("[" + peerName + "] " + line);
-                    }
-                } catch (IOException ignored) {}
-            });
-            reader.setDaemon(true);
-            reader.start();
-
-            // Thread courant : lecture clavier + envoi
-            while (KBD.hasNextLine()) {
-                String input = KBD.nextLine().trim();
-                if (input.equalsIgnoreCase("bye")) {
-                    out.println("bye");
-                    break;
-                }
-                out.println(input);
+    private ChatSession createChatSession(Socket socket, String peerName, PrintWriter out, BufferedReader in, boolean initiator) {
+        ChatSession session = new ChatSession(socket, peerName, out, in, initiator, () -> {
+            if (sessionListener != null) {
+                sessionListener.onSessionEnded(peerName);
             }
-
-        } catch (IOException e) {
-            System.err.println("[PrivateChat] Erreur session avec " + peerName + " : " + e.getMessage());
-        } finally {
-            try { socket.close(); } catch (IOException ignored) {}
-            System.out.println("[PrivateChat] Session terminée avec " + peerName + ".");
-        }
+        });
+        System.out.println("[PrivateChat] Conversation privée ouverte avec " + peerName);
+        System.out.println("[PrivateChat ↔ " + peerName + "] Tapez vos messages. 'bye' pour quitter.");
+        chatPool.submit(session::runIncomingReader);
+        return session;
     }
 
     // ── arrêt propre ──────────────────────────────────────────────────────────

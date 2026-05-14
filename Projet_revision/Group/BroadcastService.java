@@ -45,6 +45,8 @@ public class BroadcastService {
 
     /** Ajoute un membre a la liste des destinataires des broadcasts. */
     public synchronized void addMember(Member m) {
+        // Si le même nom de membre se reconnecte, remplacer l'ancienne entrée.
+        members.removeIf(existing -> existing.name.equalsIgnoreCase(m.name));
         members.add(m);
         System.out.println("[Broadcast] Membre ajoute : " + m.name + " (" + m.ip + ":" + m.udpPort + ")");
         System.out.println("[Broadcast] Membres actuels : " + members.size());
@@ -52,17 +54,18 @@ public class BroadcastService {
 
     /** Retire un membre (deconnexion). */
     public synchronized void removeMember(String name) {
-        members.removeIf(m -> m.name.equals(name));
+        members.removeIf(m -> m.name.equalsIgnoreCase(name));
         System.out.println("[Broadcast] Membre retire : " + name);
     }
 
     /**
      * Diffuse un message a tous les membres via UDP.
-     * Si le message est un PLAN ou une annonce, il est aussi archive.
+     * Si le message est un MSG, un PLAN ou une annonce, il est aussi archive.
      */
     public void broadcast(String message) {
         // Archivage des messages importants
-        if (message.startsWith(Protocol.CMD_PLAN) || message.startsWith("[ANNONCE]")) {
+        if (message.startsWith(Protocol.CMD_PLAN) || message.startsWith(Protocol.CMD_MSG)
+                || message.startsWith("[ANNONCE]")) {
             synchronized (archive) {
                 archive.add(message);
             }
