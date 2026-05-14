@@ -31,6 +31,7 @@ public class GroupListener implements Runnable {
     private BufferedReader groupIn;
     private String groupIp;
     private int    groupUdpPort;
+    private String groupName;  // nom du groupe actuel
 
     private volatile boolean running = true;
 
@@ -59,13 +60,14 @@ public class GroupListener implements Runnable {
      *
      * @return true si le JOIN a réussi.
      */
-    public boolean joinGroup(String groupIp, int groupPort, String studentName, int udpPort, int privateTcpPort) {
+    public boolean joinGroup(String groupName, String groupIp, int groupPort, String studentName, int udpPort, int privateTcpPort) {
     try {
         groupSocket = new Socket(groupIp, groupPort);
         groupOut    = new PrintWriter(groupSocket.getOutputStream(), true);
         groupIn     = new BufferedReader(new InputStreamReader(groupSocket.getInputStream()));
 
             //mémoriser l'adresse UDP du groupe (convention : port UDP = port TCP + 1)
+            this.groupName   = groupName;
             this.groupIp      = groupIp;
             this.groupUdpPort = groupPort + 1;
 
@@ -82,7 +84,7 @@ public class GroupListener implements Runnable {
                 if (line.startsWith("--- END_ARCHIVE ---")) {
                     break;
                 }
-                System.out.println("[Groupe] " + line);
+                System.out.println("[Groupe - " + groupName + "] " + line);
             }
             return true;
 
@@ -163,7 +165,7 @@ public class GroupListener implements Runnable {
     private void displayGroupMessage(String raw) {
         Message msg = Message.parse(raw);
         if (msg == null) {
-            System.out.println("[Groupe] " + raw);
+            System.out.println("[Groupe - " + groupName + "] " + raw);
             return;
         }
 
@@ -172,17 +174,17 @@ public class GroupListener implements Runnable {
             case Protocol.CMD_MSG:
                 // MSG <expediteur> <texte…>
                 if (args.length >= 2) {
-                    System.out.println("[Groupe][" + args[0] + "] " + joinFrom(args, 1));
+                    System.out.println("[Groupe - " + groupName + "][" + args[0] + "] " + joinFrom(args, 1));
                 }
                 break;
             case Protocol.CMD_PLAN:
                 // PLAN <expediteur> <texte…>
                 if (args.length >= 2) {
-                    System.out.println("[📅 PLAN][" + args[0] + "] " + joinFrom(args, 1));
+                    System.out.println("[📅 PLAN - " + groupName + "][" + args[0] + "] " + joinFrom(args, 1));
                 }
                 break;
             default:
-                System.out.println("[Groupe] " + raw);
+                System.out.println("[Groupe - " + groupName + "] " + raw);
         }
     }
 

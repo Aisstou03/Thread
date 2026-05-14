@@ -23,6 +23,7 @@ public class StudentClient {
     private static final String HELP =
         "Commandes disponibles :\n" +
         "  list <filiere> <niveau>   — liste les groupes\n" +
+        "  info <groupe>             — afficher les infos d'un groupe\n" +
         "  join <groupe>             — rejoindre un groupe\n" +
         "  say <message>             — envoyer un message public (UDP)\n" +
         "  plan <message>            — envoyer une annonce (UDP archivé)\n" +
@@ -135,6 +136,30 @@ public class StudentClient {
                 break;
             }
 
+            // ── INFO <nom_groupe> ──────────────────────────────────────────────
+            case "info": {
+                if (args.isEmpty()) {
+                    System.out.println("[USAGE] info <nom_groupe>");
+                    break;
+                }
+                String groupName = args.trim();
+                String[] info = serverConn.info(groupName);
+                if (info == null) {
+                    System.out.println("[ERREUR] Groupe introuvable : " + groupName);
+                    break;
+                }
+                // info = { ip, port } retourné par ServerConnection.info()
+                // Mais on veut afficher plus de détails : nom, ip, port, filière, niveau
+                System.out.println("[INFO] Groupe : " + groupName);
+                System.out.println("[INFO]   IP       : " + info[0]);
+                System.out.println("[INFO]   Port     : " + info[1]);
+                if (info.length >= 4) {
+                    System.out.println("[INFO]   Filière  : " + info[2]);
+                    System.out.println("[INFO]   Niveau   : " + info[3]);
+                }
+                break;
+            }
+
             // ── JOIN <groupe> ─────────────────────────────────────────────────
             case "join": {
                 if (args.isEmpty()) {
@@ -152,7 +177,7 @@ public class StudentClient {
                 // info = { ip, port }
                 String groupIp   = info[0];
                 int    groupPort = Integer.parseInt(info[1]);
-                boolean joined = groupListener.joinGroup(groupIp, groupPort, studentName, udpPort, privateChatHandler.getLocalPort());
+                boolean joined = groupListener.joinGroup(groupName, groupIp, groupPort, studentName, udpPort, privateChatHandler.getLocalPort());
                 if (joined) {
                     currentGroup = groupName;
                     System.out.println("[INFO] Vous avez rejoint le groupe : " + groupName);

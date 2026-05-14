@@ -34,7 +34,6 @@ public class PrivateChatHandler {
         private final PrintWriter out;
         private final BufferedReader in;
         private final String peerName;
-        private final boolean initiator;
         private final Runnable onClose;
         private volatile boolean open = true;
 
@@ -44,7 +43,6 @@ public class PrivateChatHandler {
             this.out = out;
             this.in = in;
             this.peerName = peerName;
-            this.initiator = initiator;
             this.onClose = onClose;
         }
 
@@ -237,12 +235,6 @@ public class PrivateChatHandler {
                 socket.close();
             } catch (IOException ignored) {}
         }
-    }
-
-    private ChatSession createChatSession(Socket socket, String peerName, boolean initiator) throws IOException {
-        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        return createChatSession(socket, peerName, out, in, initiator);
     }
 
     private ChatSession createChatSession(Socket socket, String peerName, PrintWriter out, BufferedReader in, boolean initiator) {

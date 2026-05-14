@@ -9,19 +9,6 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.List;
 
-/**
- * Gere un etudiant qui vient de se connecter en TCP au serveur de groupe.
- *
- * Quand un client se connecte, il envoie en premier :
- *   JOIN <nom_etudiant> <port_udp>
- *
- * Le port UDP est important : c'est sur ce port que le client ecoute les
- * diffusions du groupe. On le memorise pour pouvoir lui envoyer les MSG/PLAN.
- *
- * Apres le JOIN, le handler envoie au nouveau membre :
- *   1. Un message d'accueil
- *   2. Les annonces archivees (PLAN passes, annonces importantes)
- */
 public class MemberHandler implements Runnable {
 
     private final Socket socket;
@@ -57,18 +44,15 @@ public class MemberHandler implements Runnable {
             }
 
             // 2. Extraction des infos du membre
-            // 2. Extraction des infos du membre
             studentName = msg.arg(0);
             int memberTcpPort = 0;
             try {
                 memberUdpPort = Integer.parseInt(msg.arg(1));
-                // NOUVEAU : lecture du port TCP prive (3eme argument du JOIN)
                 if (msg.args.length >= 3) {
                     memberTcpPort = Integer.parseInt(msg.arg(2));
                 }
             } catch (NumberFormatException e) {
-                out.print(Message.build(String.valueOf(Protocol.CODE_BAD_REQUEST),
-                        "Invalid port"));
+                out.print(Message.build(String.valueOf(Protocol.CODE_BAD_REQUEST), "Invalid port"));
                 out.flush();
                 return;
             }
@@ -79,7 +63,6 @@ public class MemberHandler implements Runnable {
                 studentName, memberIp, memberUdpPort, memberTcpPort
             );
             broadcastService.addMember(member);
-
             System.out.println("[MemberHandler] " + studentName + " a rejoint le groupe (UDP "
                                + memberIp + ":" + memberUdpPort + ")");
 
@@ -94,15 +77,11 @@ public class MemberHandler implements Runnable {
                 System.out.println("[MemberHandler]   -> " + archived);
                 out.print(archived + "\n");
             }
-            // Marqueur de fin pour signaler au client la fin des archives
             out.print("--- END_ARCHIVE ---\n");
             out.flush();
             System.out.println("[MemberHandler] Archives envoyees a " + studentName);
 
-            // 6. On garde la connexion TCP ouverte pour detecter le depart du membre
-            // (quand readLine() renvoie null, c'est que le client a ferme)
-            // 6. Boucle pour gerer les messages TCP du membre (HEY, deconnexion, etc.)
-
+            // 6. Boucle principale : traite toutes les commandes TCP du membre
             String line;
             while ((line = in.readLine()) != null) {
                 System.out.println("[MemberHandler] " + studentName + " a envoye en TCP : " + line);
@@ -110,13 +89,32 @@ public class MemberHandler implements Runnable {
                 Message tcpMsg = Message.parse(line);
                 if (tcpMsg == null) continue;
 
-                // Gestion de la commande HEY (demande de chat prive)
-                if (Protocol.CMD_HEY.equals(tcpMsg.command) && tcpMsg.args.length >= 3) {
-                    String source      = tcpMsg.args[0];   // qui demande (ex: Diane)
-                    // tcpMsg.args[1] = "TO"
-                    String destination = tcpMsg.args[2];   // qui est demande (ex: Moussa)
+                // ── MSG <nom> <texte> ────────────────────────────────────────
+                // Diffuse le message a tous les membres du groupe via UDP.
+                // BroadcastService l'archive aussi car il commence par "MSG".
+                if (Protocol.CMD_MSG.equals(tcpMsg.command) && tcpMsg.args.length >= 2) {
 
-                    // Chercher le destinataire dans la liste des membres
+                    broadcastService.broadcast(line);
+                    out.print(Message.build(String.valueOf(Protocol.CODE_OK), "MSG", "SENT"));
+                    out.flush();
+                    System.out.println("[MemberHandler] MSG diffuse : " + line);
+
+                // ── PLAN <nom> <date> <heure> <description> ─────────────────
+                // Diffuse ET archive automatiquement (commence par "PLAN").
+                // Exemple : PLAN Aissatou 2026-05-16 14:00 Revision_TCP_UDP
+                } else if (Protocol.CMD_PLAN.equals(tcpMsg.command) && tcpMsg.args.length >= 4) {
+
+                    broadcastService.broadcast(line);
+                    out.print(Message.build(String.valueOf(Protocol.CODE_OK), "PLAN", "SENT"));
+                    out.flush();
+                    System.out.println("[MemberHandler] PLAN diffuse et archive : " + line);
+
+                // ── HEY <source> TO <destination> ───────────────────────────
+                } else if (Protocol.CMD_HEY.equals(tcpMsg.command) && tcpMsg.args.length >= 3) {
+
+                    String source      = tcpMsg.args[0];
+                    String destination = tcpMsg.args[2];
+
                     BroadcastService.Member target = null;
                     for (BroadcastService.Member m : broadcastService.getMembers()) {
                         if (m.name.equalsIgnoreCase(destination)) {
@@ -126,21 +124,18 @@ public class MemberHandler implements Runnable {
                     }
 
                     if (target == null) {
-                        // Destinataire pas dans le groupe
                         out.print(Message.build(String.valueOf(Protocol.CODE_NOT_FOUND),
                                 "HEY", destination, "NOT_FOUND"));
                         out.flush();
                         System.out.println("[MemberHandler] HEY : " + destination + " introuvable");
                     } else {
-                        // Renvoyer l'ip et le port TCP prive du destinataire
-                        // Format : 300 HEY <destination> <ip> <port>
                         String response = Message.build(
                             String.valueOf(Protocol.CODE_REDIRECT),
                             "HEY", destination, target.ip, String.valueOf(target.tcpPort)
                         );
                         out.print(response);
                         out.flush();
-                        System.out.println("[MemberHandler] HEY : " + source + " -> " + destination 
+                        System.out.println("[MemberHandler] HEY : " + source + " -> " + destination
                                         + " (" + target.ip + ":" + target.tcpPort + ")");
                     }
                 }
@@ -149,7 +144,6 @@ public class MemberHandler implements Runnable {
         } catch (Exception e) {
             System.err.println("[MemberHandler] Erreur : " + e.getMessage());
         } finally {
-            // Le membre s'est deconnecte : on le retire de la liste
             if (studentName != null) {
                 broadcastService.removeMember(studentName);
                 System.out.println("[MemberHandler] " + studentName + " a quitte le groupe");

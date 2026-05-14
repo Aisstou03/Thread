@@ -66,7 +66,7 @@ public class ServerConnection {
      * Réponse attendue : "200 INFO <nom> <ip> <port> <filiere> <niveau>"
      *                 ou "404 INFO NOT_FOUND"
      *
-     * @return tableau { ip, port } si trouvé, null sinon.
+     * @return tableau { ip, port, filiere, niveau } si trouvé, null sinon.
      */
     public String[] info(String groupName) {
         String request  = Message.build(Protocol.CMD_INFO, groupName);
@@ -86,13 +86,15 @@ public class ServerConnection {
         // Format : 200 INFO <nom> <ip> <port> <filiere> <niveau>
         // args = [ "INFO", nom, ip, port, filiere, niveau ]
         String[] args = msg.getArgs();
-        if (args.length < 4) {
+        if (args.length < 5) {
             System.err.println("[ServerConnection] Réponse INFO mal formée : " + response);
             return null;
         }
-        String ip   = args[2]; // index 0 = "INFO", 1 = nom, 2 = ip, 3 = port
+        String ip      = args[2]; // index 0 = "INFO", 1 = nom, 2 = ip, 3 = port, 4 = filiere, 5 = niveau
         String portStr = args[3];
-        return new String[]{ ip, portStr };
+        String filiere = args[4];
+        String niveau  = args[5];
+        return new String[]{ ip, portStr, filiere, niveau };
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
