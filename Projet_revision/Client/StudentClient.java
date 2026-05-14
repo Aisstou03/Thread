@@ -25,6 +25,7 @@ public class StudentClient {
         "  list <filiere> <niveau>   — liste les groupes\n" +
         "  info <groupe>             — afficher les infos d'un groupe\n" +
         "  join <groupe>             — rejoindre un groupe\n" +
+        "  info <groupe>             — détails d'un groupe\n" +
         "  say <message>             — envoyer un message public (UDP)\n" +
         "  plan <message>            — envoyer une annonce (UDP archivé)\n" +
         "  hey <etudiant>            — démarrer un chat privé (TCP)\n" +
@@ -133,30 +134,6 @@ public class StudentClient {
                 }
                 String response = serverConn.list(a[0], a[1]);
                 System.out.println(response != null ? response : "[ERREUR] Pas de réponse du serveur.");
-                break;
-            }
-
-            // ── INFO <nom_groupe> ──────────────────────────────────────────────
-            case "info": {
-                if (args.isEmpty()) {
-                    System.out.println("[USAGE] info <nom_groupe>");
-                    break;
-                }
-                String groupName = args.trim();
-                String[] info = serverConn.info(groupName);
-                if (info == null) {
-                    System.out.println("[ERREUR] Groupe introuvable : " + groupName);
-                    break;
-                }
-                // info = { ip, port } retourné par ServerConnection.info()
-                // Mais on veut afficher plus de détails : nom, ip, port, filière, niveau
-                System.out.println("[INFO] Groupe : " + groupName);
-                System.out.println("[INFO]   IP       : " + info[0]);
-                System.out.println("[INFO]   Port     : " + info[1]);
-                if (info.length >= 4) {
-                    System.out.println("[INFO]   Filière  : " + info[2]);
-                    System.out.println("[INFO]   Niveau   : " + info[3]);
-                }
                 break;
             }
 
